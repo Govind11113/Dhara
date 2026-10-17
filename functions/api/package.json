@@ -1,0 +1,14 @@
+{
+  "name": "dhara-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Server-authoritative API for Dhara Green Credits. Every credit-minting rule lives here.",
+  "main": "src/main.js",
+  "scripts": {
+    "test": "node --test \"src/**/*.test.js\""
+  },
+  "dependencies": {
+    "node-appwrite": "17.0.0"
+  }
+}

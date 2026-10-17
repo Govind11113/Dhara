@@ -1,0 +1,24 @@
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.iml
+build/
+.dart_tool/
+.flutter-plugins-dependencies
+node_modules/
+android/local.properties
+android/.gradle/
+android/.kotlin/
+
+# benchmark fixtures (downloaded on demand)
+scripts/.bench_cache/
+dist/
+
+# IDE settings (local paths and personal preferences)
+.idea/
+.vscode/
+
+# Local scratch script with a path from this machine in it
+scripts/_sdkprobe.py

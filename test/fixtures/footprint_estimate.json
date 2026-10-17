@@ -1,0 +1,76 @@
+{
+  "factorsVersion": "2026.1",
+  "monthKg": 156.8,
+  "yearKg": 1881,
+  "groups": {
+    "electricity": 36.4,
+    "cooking": 10.4,
+    "transport": 34.4,
+    "air": 75.6
+  },
+  "lines": [
+    {
+      "key": "flight_domestic",
+      "group": "air",
+      "label": "Flight within India",
+      "quantity": 1000,
+      "unit": "km",
+      "kg": 75.6,
+      "confidence": "medium",
+      "region": "UK",
+      "share": 0.482
+    },
+    {
+      "key": "electricity",
+      "group": "home",
+      "label": "Grid electricity",
+      "quantity": 200,
+      "unit": "kWh (household)",
+      "kg": 36.4,
+      "confidence": "high",
+      "region": "India",
+      "share": 0.232
+    },
+    {
+      "key": "car_petrol",
+      "group": "road",
+      "label": "Car (petrol)",
+      "quantity": 300,
+      "unit": "km",
+      "kg": 24.2,
+      "confidence": "medium",
+      "region": "UK",
+      "share": 0.155
+    },
+    {
+      "key": "lpg",
+      "group": "home",
+      "label": "Cooking gas (LPG)",
+      "quantity": 1,
+      "unit": "cylinders (14.2 kg, household)",
+      "kg": 10.4,
+      "confidence": "high",
+      "region": "International",
+      "share": 0.067
+    },
+    {
+      "key": "bus",
+      "group": "road",
+      "label": "Bus",
+      "quantity": 100,
+      "unit": "km",
+      "kg": 10.2,
+      "confidence": "medium",
+      "region": "UK",
+      "share": 0.065
+    }
+  ],
+  "comparison": {
+    "indiaKgYear": 2201,
+    "worldKgYear": 4729,
+    "indiaYear": 2024,
+    "worldYear": 2024,
+    "ofIndia": 0.85,
+    "ofWorld": 0.4
+  }
+}

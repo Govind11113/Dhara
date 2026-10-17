@@ -1,0 +1,15 @@
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+  },
+  test: {
+    // The logic under test (API envelope parsing, retry, formatting) has no DOM.
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+  },
+});

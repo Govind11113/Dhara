@@ -1,0 +1,16 @@
+{
+  "name": "dhara-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Appwrite provisioning + seeding for Dhara Green Credits",
+  "scripts": {
+    "provision": "node provision.mjs",
+    "seed": "node seed.mjs",
+    "deploy": "node deploy.mjs",
+    "deploy:admin": "node deploy_admin.mjs"
+  },
+  "dependencies": {
+    "node-appwrite": "17.0.0",
+    "dotenv": "16.4.7"
+  }
+}
