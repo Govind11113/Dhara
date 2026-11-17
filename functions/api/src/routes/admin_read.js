@@ -247,8 +247,56 @@ async function list({ databases, body }) {
   };
 }
 
+/**
+ * Where the fraud flags about a queued item are filed. These follow the
+ * `flag()` calls in routes/tree.js:
+ *   planting  -> refId = the uploaded photo's file id (refType tree_plant)
+ *   check-in  -> refId = `${treeId}:${monthKey}`      (refType tree_verify)
+ *   either    -> refId = the tree id                   (refType tree: out of
+ *                radius, someone else trying to check in on it)
+ */
+export function flagRefs(kind, doc) {
+  const refs =
+    kind === 'tree'
+      ? [doc.plantPhotoFileId, doc.$id]
+      : [doc.treeId && doc.monthKey ? `${doc.treeId}:${doc.monthKey}` : '', doc.treeId];
+  return [...new Set(refs.filter(Boolean).map(String))];
+}
+
+const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
+
+/** The flags among [rows] filed under any of [refs], unresolved and worst first. */
+export function flagsFor(refs, rows) {
+  const want = new Set(refs);
+  return rows
+    .filter((f) => want.has(String(f.refId ?? '')))
+    .map((f) => ({
+      kind: String(f.kind ?? ''),
+      severity: String(f.severity ?? 'low'),
+      detail: String(f.detail ?? ''),
+      resolved: f.resolved === true,
+    }))
+    .sort(
+      (a, b) =>
+        Number(a.resolved) - Number(b.resolved) ||
+        (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9),
+    );
+}
+
+/** Flags for a set of refIds, in chunks the query size limit allows. */
+async function loadFlags(databases, refs) {
+  const unique = [...new Set(refs)];
+  const rows = [];
+  for (let i = 0; i < unique.length; i += 100) {
+    rows.push(
+      ...(await pageAll(databases, COL.fraudFlags, [Query.equal('refId', unique.slice(i, i + 100))], 500)),
+    );
+  }
+  return rows;
+}
+
 /** Everything the review screen needs for one submission, in a single read. */
-async function queue({ databases }) {
+async function queue({ databases, config = {}, log = () => {} }) {
   const [trees, vers] = await Promise.all([
     databases.listDocuments(DB, COL.trees, [
       Query.equal('status', 'pending_review'),
@@ -311,6 +359,9 @@ async function queue({ databases }) {
       aiVerdict: t.aiVerdict,
       aiConfidence: t.aiConfidence,
       aiModel: t.aiModel,
+      // Trees do not store the distance to the nearest earlier photo.
+      phashDistanceToNearest: null,
+      flagRefs: flagRefs('tree', t),
     })),
     ...vers.documents.map((v) => {
       const t = parents.get(v.treeId);
@@ -332,11 +383,30 @@ async function queue({ databases }) {
         aiVerdict: v.aiVerdict,
         aiConfidence: v.aiConfidence,
         aiModel: v.aiModel,
+        phashDistanceToNearest: Number.isFinite(v.phashDistanceToNearest) ? v.phashDistanceToNearest : null,
+        flagRefs: flagRefs('verification', v),
       };
     }),
   ].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 
-  return { items, counts: { trees: trees.total, verifications: vers.total } };
+  // Read-only. A failed flag lookup must not hide the queue: those items carry
+  // `flags: null` ("could not load") rather than an empty list ("none").
+  let flagRows = null;
+  try {
+    flagRows = await loadFlags(databases, items.flatMap((i) => i.flagRefs));
+  } catch (e) {
+    log(`queue: flag lookup failed: ${e.message}`);
+  }
+  for (const item of items) {
+    item.flags = flagRows ? flagsFor(item.flagRefs, flagRows) : null;
+    delete item.flagRefs;
+  }
+
+  return {
+    items,
+    counts: { trees: trees.total, verifications: vers.total },
+    phashThreshold: num(config['fraud.phash_hamming_threshold'], 8),
+  };
 }
 
 const PHOTO_BUCKETS = new Set(['tree_photos', 'feedback_media', 'bill_docs', 'avatars']);

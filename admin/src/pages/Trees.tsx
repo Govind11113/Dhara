@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { PAGE_SIZE, useList } from '../hooks';
-import { formatDate, humanise, percent, shortId } from '../lib/format';
+import { explainReasons, explainVerdict, formatDate, humanise, percent, shortId } from '../lib/format';
 import type { Tree, Verification } from '../lib/types';
 import { Empty, ErrorBox, PageHeader, Pager, PhotoButton, Pill, Spinner } from '../ui';
 
@@ -76,10 +76,10 @@ function TreeTable() {
                   </th>
                   <td>
                     <Pill value={t.status} />
-                    {t.rejectReason && <div className="muted small">{t.rejectReason}</div>}
+                    {t.rejectReason && <div className="muted small">{explainReasons(t.rejectReason).join('; ')}</div>}
                   </td>
                   <td className="num">{t.verificationCount}/{t.vestingMonths ?? 12}</td>
-                  <td>{typeof t.aiConfidence === 'number' && t.aiModel ? percent(t.aiConfidence) : '—'}</td>
+                  <td><AiCell verdict={t.aiVerdict} confidence={t.aiModel ? t.aiConfidence : undefined} /></td>
                   <td>{formatDate(t.plantedAt)}</td>
                   <td className="mono" title={t.ownerId}>{shortId(t.ownerId)}</td>
                   <td><PhotoButton fileId={t.plantPhotoFileId} label={`Photo of ${t.nickname || t.speciesName}`} /></td>
@@ -128,11 +128,11 @@ function CheckinTable() {
                   </th>
                   <td>
                     <Pill value={v.status} />
-                    {v.rejectReason && <div className="muted small">{v.rejectReason}</div>}
+                    {v.rejectReason && <div className="muted small">{explainReasons(v.rejectReason).join('; ')}</div>}
                   </td>
                   <td className="num">{Math.round(v.distanceM)} m</td>
                   <td className="num">{v.creditsAwarded}</td>
-                  <td>{typeof v.aiConfidence === 'number' && v.aiVerdict ? percent(v.aiConfidence) : '—'}</td>
+                  <td><AiCell verdict={v.aiVerdict} confidence={v.aiVerdict ? v.aiConfidence : undefined} /></td>
                   <td>{formatDate(v.verifiedAt)}</td>
                   <td><PhotoButton fileId={v.photoFileId} label={`Check-in photo ${v.monthKey}`} /></td>
                 </tr>
@@ -142,6 +142,22 @@ function CheckinTable() {
         </div>
       )}
       {data && <Pager offset={offset} limit={PAGE_SIZE} total={data.total} onChange={setOffset} />}
+    </>
+  );
+}
+
+/**
+ * The AI result for one row: confidence, then what the model said in plain
+ * words. Same reading as the review queue's AI panel. A dash when the AI did
+ * not run (unavailable or switched off).
+ */
+export function AiCell({ verdict, confidence }: { verdict?: string; confidence?: number }) {
+  if (typeof confidence !== 'number') return <>—</>;
+  const lines = explainVerdict(verdict);
+  return (
+    <>
+      {percent(confidence)}
+      {lines.length > 0 && <div className="muted small">{lines.join('; ')}</div>}
     </>
   );
 }
