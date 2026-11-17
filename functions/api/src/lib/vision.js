@@ -24,12 +24,26 @@ const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 export const PROVIDER = 'openrouter';
 export const DEFAULT_MODEL = 'nvidia/nemotron-3.5-super-vl:free';
 
+/**
+ * True when the user named a specific species. `Other`, an empty value and the
+ * generic fall-backs ("Tree", "Unknown") mean NO species was declared, so there
+ * is nothing for the photo to match or contradict.
+ */
+export function isSpecificSpecies(declaredSpecies) {
+  const s = String(declaredSpecies ?? '').trim().toLowerCase();
+  return !['', 'other', 'others', 'unknown', 'tree', 'none', 'n/a'].includes(s);
+}
+
 export function buildPrompt(declaredSpecies, isVerify = false) {
+  const specific = isSpecificSpecies(declaredSpecies);
   return [
     'You are verifying a photo submitted to a tree-planting rewards programme.',
     'Real credits are paid out on your answer, so be strict but fair.',
     '',
-    `The user says this is a ${declaredSpecies || 'tree'}.`,
+    specific
+      ? `The user says this is a ${declaredSpecies}.`
+      : 'The user did not name a specific species (they chose "Other"). Do not ' +
+        'judge the species. The photo may show one plant or several small plants.',
     isVerify
       ? 'This is a monthly check-in on a tree they planted earlier, so an established plant is expected.'
       : 'This is a newly planted sapling, so freshly disturbed soil is expected.',
@@ -39,8 +53,11 @@ export function buildPrompt(declaredSpecies, isVerify = false) {
     '- isRealPhoto: is this a photograph of a real scene, rather than a photo',
     '  of a screen, a printed picture, or a digitally generated image?',
     '- isFreshlyPlanted: does the ground show signs of recent planting?',
-    '- species: what species does the plant appear to be?',
-    '- speciesMatches: is that consistent with what the user said?',
+    '- species: what species does the plant appear to be? Use "unknown" if you',
+    '  cannot tell.',
+    specific
+      ? '- speciesMatches: is that consistent with what the user said?'
+      : '- speciesMatches: always null, because no species was declared.',
     // Confidence is in the assessment, not in the photo being genuine. Asking
     // for genuineness instead inverts the scale: a blatant fake comes back as
     // 0, which reads as "no idea" and would hold it for review rather than
@@ -112,7 +129,7 @@ export function parseVerdict(raw) {
  *
  * @returns {{action: 'approve'|'review'|'reject', reasons: string[], confidence: number}}
  */
-export function decide(verdict, config = {}) {
+export function decide(verdict, config = {}, options = {}) {
   if (!verdict) return { action: 'approve', reasons: [], confidence: 0 };
 
   const min = numOr(config['vision.ai_confidence_min'], 0.6);
@@ -142,7 +159,22 @@ export function decide(verdict, config = {}) {
 
   // Never a rejection: picking the wrong species from the list is a mistake
   // anyone makes, and the tree is still real.
-  if (verdict.speciesMatches === false) reasons.push('ai_species_mismatch');
+  // Only meaningful when the user named a specific species. `Other`, empty and
+  // unknown declarations have nothing to contradict, so a "mismatch" there is
+  // the model failing to name a plant, not a mistake by the user. When the
+  // caller omits the options argument entirely, the check stays on, as before.
+  // An explicitly supplied `declaredSpecies` (even `undefined`) is judged by
+  // isSpecificSpecies().
+  const hasDeclaredSpecies = Object.prototype.hasOwnProperty.call(
+    options,
+    'declaredSpecies',
+  );
+  const speciesDeclared = hasDeclaredSpecies
+    ? isSpecificSpecies(options.declaredSpecies)
+    : true;
+  if (speciesDeclared && verdict.speciesMatches === false) {
+    reasons.push('ai_species_mismatch');
+  }
 
   if (verdict.isRealPhoto === false) reasons.push('ai_screen_photo');
 
