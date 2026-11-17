@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { biggest, compactNumber, explainReasons, formatMass, explainVerdict, formatDate, humanise, mapsUrl, ms, percent, plural, share, shortId, timeAgo } from './format';
+import { biggest, compactNumber, explainReasons, flagLabel, formatMass, explainVerdict, formatDate, humanise, mapsUrl, ms, percent, phashWarning, plural, share, shortId, timeAgo } from './format';
 
 const now = new Date('2026-10-17T12:00:00.000Z');
 
@@ -137,6 +137,57 @@ describe('explainReasons', () => {
   it('returns nothing for an empty reason', () => {
     expect(explainReasons('')).toEqual([]);
     expect(explainReasons(undefined)).toEqual([]);
+  });
+
+  it('splits codes mixed with a sentence, keeping the sentence whole', () => {
+    expect(explainReasons('ai_unavailable We could not clearly see a plant in that photo.')).toEqual([
+      'The AI check was unavailable',
+      'We could not clearly see a plant in that photo.',
+    ]);
+    expect(explainReasons('We could not clearly see a plant. ai_low_confidence')).toEqual([
+      'We could not clearly see a plant.',
+      'The AI was not confident about the photo',
+    ]);
+    expect(explainReasons('ai_species_mismatch Check the species. ai_low_confidence')).toEqual([
+      'The plant does not look like the species chosen',
+      'Check the species.',
+      'The AI was not confident about the photo',
+    ]);
+  });
+});
+
+describe('flagLabel', () => {
+  it('names known flag kinds', () => {
+    expect(flagLabel('duplicate_photo')).toBe('Duplicate photo');
+    expect(flagLabel('not_a_plant')).toBe('Plant not clearly seen');
+    expect(flagLabel('out_of_radius')).toBe('Too far from the tree');
+    expect(flagLabel('mock_location')).toBe('Fake GPS location');
+  });
+
+  it('falls back to a readable form for an unknown kind', () => {
+    expect(flagLabel('brand_new_kind')).toBe('Brand new kind');
+  });
+});
+
+describe('phashWarning', () => {
+  it('flags a duplicate at or below the threshold', () => {
+    expect(phashWarning(3, 8)).toEqual({
+      severity: 'high',
+      text: 'Duplicate photo: 3 bits from an earlier photo (limit 8)',
+    });
+    expect(phashWarning(8, 8)?.severity).toBe('high');
+  });
+
+  it('flags a near-duplicate up to twice the threshold', () => {
+    expect(phashWarning(9, 8)?.severity).toBe('medium');
+    expect(phashWarning(16, 8)?.text).toBe('Possible near-duplicate: 16 bits from an earlier photo');
+  });
+
+  it('says nothing for a distinct photo, no earlier photo or no data', () => {
+    expect(phashWarning(17, 8)).toBeNull();
+    expect(phashWarning(64, 8)).toBeNull();
+    expect(phashWarning(null, 8)).toBeNull();
+    expect(phashWarning(undefined)).toBeNull();
   });
 });
 

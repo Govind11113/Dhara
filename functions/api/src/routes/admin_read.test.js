@@ -1,7 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { LISTS, aggregateInspections, buildListQuery, sanitize, sniffMime, sumField } from './admin_read.js';
+import {
+  LISTS,
+  READ_ROUTES,
+  aggregateInspections,
+  buildListQuery,
+  flagRefs,
+  flagsFor,
+  sanitize,
+  sniffMime,
+  sumField,
+} from './admin_read.js';
 import { Rejected } from '../lib/context.js';
 
 const text = (queries) => queries.map((q) => String(q));
@@ -148,4 +158,165 @@ test('sumField adds numbers and treats everything else as zero', () => {
 
 test('sumField of nothing is zero', () => {
   assert.equal(sumField([], 'x'), 0);
+});
+
+// ---------------------------------------------------------------------------
+// Review queue: fraud flags and pHash distance
+// ---------------------------------------------------------------------------
+
+/** In-memory Appwrite that understands the equal/limit queries the queue uses. */
+function queueDb(seed, { failOn } = {}) {
+  return {
+    listDocuments: async (_db, col, queries = []) => {
+      if (col === failOn) throw new Error('boom');
+      let docs = [...(seed[col] ?? [])];
+      let limit = 25;
+      for (const q of queries) {
+        const j = JSON.parse(String(q));
+        if (j.method === 'equal') docs = docs.filter((d) => j.values.includes(d[j.attribute]));
+        if (j.method === 'limit') limit = j.values[0];
+      }
+      return { documents: docs.slice(0, limit), total: docs.length };
+    },
+  };
+}
+
+const queueRoute = READ_ROUTES['/admin/queue'];
+
+const seed = () => ({
+  trees: [
+    {
+      $id: 't1', $createdAt: '2026-11-01T10:00:00.000Z', status: 'pending_review', ownerId: 'u1',
+      speciesName: 'Other', plantPhotoFileId: 'file1', lat: 1, lng: 2, accuracyM: 5,
+      rejectReason: 'ai_low_confidence', aiVerdict: 'conf=0.40 plant=true real=true', aiConfidence: 0.4, aiModel: 'm',
+    },
+    {
+      $id: 't2', $createdAt: '2026-11-03T10:00:00.000Z', status: 'pending_review', ownerId: 'u2',
+      speciesName: 'Neem', plantPhotoFileId: 'file2', lat: 1, lng: 2, accuracyM: 5,
+    },
+    // Parent of the check-in; not itself waiting.
+    { $id: 't3', $createdAt: '2026-10-01T10:00:00.000Z', status: 'alive', ownerId: 'u1', speciesName: 'Mango', nickname: 'Big' },
+  ],
+  tree_verifications: [
+    {
+      $id: 'v1', $createdAt: '2026-11-02T10:00:00.000Z', status: 'manual_review', userId: 'u1', treeId: 't3',
+      monthKey: '2026-11', photoFileId: 'file3', phashDistanceToNearest: 11, rejectReason: 'ai_species_mismatch',
+    },
+  ],
+  profiles: [
+    { $id: 'u1', name: 'Asha', email: 'a@example.com', trustScore: 90 },
+    { $id: 'u2', name: 'Ravi', email: 'r@example.com', trustScore: 40, isBanned: false },
+  ],
+  fraud_flags: [
+    { $id: 'f1', userId: 'u1', kind: 'not_a_plant', severity: 'medium', detail: 'client confidence 0.40', refType: 'tree_plant', refId: 'file1', resolved: false },
+    { $id: 'f2', userId: 'u1', kind: 'duplicate_photo', severity: 'high', detail: 'hamming 5 vs x', refType: 'tree_verify', refId: 't3:2026-11', resolved: false },
+    { $id: 'f3', userId: 'u1', kind: 'out_of_radius', severity: 'medium', detail: '80 m from tree', refType: 'tree', refId: 't3', resolved: true },
+    // Same tree, a different month: not about this check-in.
+    { $id: 'f4', userId: 'u1', kind: 'duplicate_photo', severity: 'critical', detail: 'old', refType: 'tree_verify', refId: 't3:2026-10', resolved: false },
+    // Unrelated record entirely.
+    { $id: 'f5', userId: 'u9', kind: 'mock_location', severity: 'critical', detail: 'x', refType: 'tree_plant', refId: 'fileX', resolved: false },
+  ],
+});
+
+test('flagRefs follows the refIds tree.js files flags under', () => {
+  assert.deepEqual(flagRefs('tree', { $id: 't1', plantPhotoFileId: 'file1' }), ['file1', 't1']);
+  assert.deepEqual(flagRefs('verification', { treeId: 't3', monthKey: '2026-11' }), ['t3:2026-11', 't3']);
+  assert.deepEqual(flagRefs('verification', { treeId: 't3' }), ['t3']);
+  assert.deepEqual(flagRefs('tree', {}), []);
+});
+
+test('flagsFor keeps only matching flags, unresolved and worst first', () => {
+  const rows = [
+    { refId: 'a', kind: 'k1', severity: 'low', detail: 'd1', resolved: false },
+    { refId: 'a', kind: 'k2', severity: 'critical', detail: 'd2', resolved: true },
+    { refId: 'a', kind: 'k3', severity: 'high', detail: 'd3', resolved: false, userId: 'u', trustScoreDelta: -5 },
+    { refId: 'b', kind: 'k4', severity: 'critical', detail: 'd4', resolved: false },
+  ];
+  assert.deepEqual(flagsFor(['a'], rows), [
+    { kind: 'k3', severity: 'high', detail: 'd3', resolved: false },
+    { kind: 'k1', severity: 'low', detail: 'd1', resolved: false },
+    { kind: 'k2', severity: 'critical', detail: 'd2', resolved: true },
+  ]);
+  assert.deepEqual(flagsFor(['zzz'], rows), []);
+});
+
+test('queue attaches the matching flags to trees and check-ins', async () => {
+  const out = await queueRoute({ databases: queueDb(seed()), config: {} });
+  const byId = Object.fromEntries(out.items.map((i) => [i.id, i]));
+
+  assert.deepEqual(byId.t1.flags, [
+    { kind: 'not_a_plant', severity: 'medium', detail: 'client confidence 0.40', resolved: false },
+  ]);
+  assert.deepEqual(byId.v1.flags, [
+    { kind: 'duplicate_photo', severity: 'high', detail: 'hamming 5 vs x', resolved: false },
+    { kind: 'out_of_radius', severity: 'medium', detail: '80 m from tree', resolved: true },
+  ]);
+  // Neither another month's flag nor an unrelated record leaks in.
+  const all = out.items.flatMap((i) => i.flags);
+  assert.ok(!all.some((f) => f.detail === 'old' || f.kind === 'mock_location'));
+  // Internal lookup keys never reach the panel.
+  assert.ok(out.items.every((i) => !('flagRefs' in i)));
+});
+
+test('queue items without flags get an empty list', async () => {
+  const out = await queueRoute({ databases: queueDb(seed()), config: {} });
+  assert.deepEqual(out.items.find((i) => i.id === 't2').flags, []);
+});
+
+test('queue returns the pHash distance for check-ins and the threshold', async () => {
+  const out = await queueRoute({ databases: queueDb(seed()), config: { 'fraud.phash_hamming_threshold': 6 } });
+  assert.equal(out.items.find((i) => i.id === 'v1').phashDistanceToNearest, 11);
+  // Trees do not store it.
+  assert.equal(out.items.find((i) => i.id === 't1').phashDistanceToNearest, null);
+  assert.equal(out.phashThreshold, 6);
+  assert.equal((await queueRoute({ databases: queueDb(seed()) })).phashThreshold, 8);
+});
+
+test('a missing pHash distance on a check-in is null, not undefined or NaN', async () => {
+  const s = seed();
+  delete s.tree_verifications[0].phashDistanceToNearest;
+  const out = await queueRoute({ databases: queueDb(s), config: {} });
+  assert.equal(out.items.find((i) => i.id === 'v1').phashDistanceToNearest, null);
+});
+
+test('a failed flag lookup keeps the queue and marks flags as unknown', async () => {
+  const logs = [];
+  const out = await queueRoute({
+    databases: queueDb(seed(), { failOn: 'fraud_flags' }),
+    config: {},
+    log: (m) => logs.push(m),
+  });
+  assert.equal(out.items.length, 3);
+  assert.ok(out.items.every((i) => i.flags === null));
+  assert.ok(logs.some((m) => m.includes('flag lookup failed')));
+});
+
+test('queue keeps its existing shape, order and counts', async () => {
+  const out = await queueRoute({ databases: queueDb(seed()), config: {} });
+  assert.deepEqual(out.counts, { trees: 2, verifications: 1 });
+  assert.deepEqual(out.items.map((i) => i.id), ['t1', 'v1', 't2']);
+
+  const t1 = out.items[0];
+  assert.equal(t1.kind, 'tree');
+  assert.equal(t1.userName, 'Asha');
+  assert.equal(t1.trustScore, 90);
+  assert.equal(t1.photoFileId, 'file1');
+  assert.equal(t1.reason, 'ai_low_confidence');
+  assert.equal(t1.aiVerdict, 'conf=0.40 plant=true real=true');
+  assert.equal(t1.aiConfidence, 0.4);
+
+  const v1 = out.items[1];
+  assert.equal(v1.kind, 'verification');
+  assert.equal(v1.treeId, 't3');
+  assert.equal(v1.photoFileId, 'file3');
+  assert.equal(v1.reason, 'ai_species_mismatch');
+  assert.ok(v1.title.includes('2026-11') && v1.title.includes('Mango') && v1.title.includes('Big'));
+});
+
+test('queue only reads', async () => {
+  const db = queueDb(seed());
+  for (const m of ['createDocument', 'updateDocument', 'deleteDocument']) {
+    db[m] = async () => assert.fail(`queue must not call ${m}`);
+  }
+  await queueRoute({ databases: db, config: {} });
 });
