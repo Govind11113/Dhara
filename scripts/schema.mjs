@@ -643,6 +643,11 @@ export const COLLECTIONS = [
       F('airKg', false, 0, 0, 1000000),
       // Which set of emission factors produced these figures.
       S('factorsVersion', 16, true),
+      // Where each input came from, as JSON: {"electricityKwh": {"source":
+      // "verified"|"document_review"|"unverified"|"user_entered", "readingId",
+      // "periodStart", "periodEnd"}}. Added for utility bill import; absent on
+      // rows saved before it, which read as user-entered.
+      S('inputSources', 1024),
       D('createdAt'),
       D('updatedAt', true),
     ],
@@ -650,6 +655,98 @@ export const COLLECTIONS = [
       idx('idx_user_month', ['userId', 'monthKey'], IndexType.Unique),
       idx('idx_month', ['monthKey']),
       idx('idx_user_time', ['userId', 'updatedAt'], IndexType.Key, ['ASC', 'DESC']),
+    ],
+  },
+
+  // --- Household utility consumption ---------------------------------------
+  //
+  // Separate from electricity_accounts, which backs bill-credit redemption and
+  // stays as it is. These two collections never move credits.
+
+  {
+    id: 'utility_verifications',
+    name: 'Utility Verifications',
+    ...SERVER_ONLY,
+    // One row per verification attempt: the audit trail and the consent record.
+    // The account number itself is never stored, only its last four characters
+    // and a keyed hash used to recognise the same connection again.
+    attributes: [
+      S('userId', 64, true),
+      S('requestId', 64, true),
+      E('utilityType', ['electricity', 'png'], true, 'electricity'),
+      S('country', 2, true),
+      S('state', 8, true),
+      S('providerId', 48, true),
+      S('accountMasked', 24, true),
+      S('accountHash', 64, true),
+      E('method', ['bill_fetch', 'document', 'manual'], true, 'manual'),
+      E('status', [
+        'pending', 'fetching', 'verified', 'document_review', 'unverified', 'failed',
+        'unsupported_provider', 'provider_unavailable', 'consumption_unavailable', 'duplicate',
+      ], true, 'pending'),
+      S('statusReason', 64),
+      S('providerRefId', 64),
+      S('readingId', 64),
+      S('billFileId', 64),
+      S('consentPurpose', 256, true),
+      S('consentVersion', 16, true),
+      D('consentAt', true),
+      D('createdAt', true),
+      D('updatedAt', true),
+    ],
+    indexes: [
+      idx('idx_user_request', ['userId', 'requestId'], IndexType.Unique),
+      idx('idx_user_time', ['userId', 'createdAt'], IndexType.Key, ['ASC', 'DESC']),
+      idx('idx_status', ['status']),
+    ],
+  },
+
+  {
+    id: 'utility_readings',
+    name: 'Utility Readings',
+    ...SERVER_ONLY,
+    // One row per connection per billing period. `status` says how much the
+    // figure can be trusted: verified (from the utility), document_review
+    // (read from an uploaded bill), unverified (typed by the user).
+    attributes: [
+      S('userId', 64, true),
+      S('verificationId', 64, true),
+      E('utilityType', ['electricity', 'png'], true, 'electricity'),
+      S('country', 2, true),
+      S('state', 8, true),
+      S('providerId', 48, true),
+      S('providerName', 96, true),
+      S('accountMasked', 24, true),
+      S('accountHash', 64, true),
+      E('method', ['bill_fetch', 'document', 'manual'], true, 'manual'),
+      E('status', ['verified', 'document_review', 'unverified'], true, 'unverified'),
+      S('periodStart', 10, true),
+      S('periodEnd', 10, true),
+      F('consumptionValue', true, null, 0, 100000),
+      E('consumptionUnit', ['kWh', 'SCM'], true, 'kWh'),
+      F('previousReading', false, null, 0, 100000000),
+      F('currentReading', false, null, 0, 100000000),
+      I('billAmountPaise', false, null, 0),
+      S('currency', 3),
+      S('billReferenceId', 64),
+      S('providerReferenceId', 64),
+      S('billFileId', 64),
+      F('carbonKg', false, null, 0, 1000000),
+      E('carbonStatus', ['calculated', 'pending_factor'], true, 'pending_factor'),
+      S('factorKey', 32),
+      S('factorsVersion', 16, true),
+      // The footprint month this reading was counted in, so it is never
+      // counted in a second month.
+      S('appliedMonthKey', 7),
+      S('dedupeKey', 64, true),
+      D('fetchedAt'),
+      D('createdAt', true),
+      D('updatedAt', true),
+    ],
+    indexes: [
+      idx('idx_dedupe', ['dedupeKey'], IndexType.Unique),
+      idx('idx_user_period', ['userId', 'periodEnd'], IndexType.Key, ['ASC', 'DESC']),
+      idx('idx_user_type', ['userId', 'utilityType']),
     ],
   },
 
@@ -759,6 +856,7 @@ export const CONFIG_SEED = [
   ['fraud.phash_hamming_threshold', '8', 'int', 'Below this Hamming distance photos count as duplicates'],
   ['fraud.trust_score_block_below', '40', 'int', 'Auto-route to manual review below this trust score'],
   ['vision.ai_enabled', 'true', 'bool', 'Send tree photos to the server-side vision model'],
+  ['utility.requests_per_hour', '10', 'int', 'Utility bill fetches and uploads allowed per member per hour'],
   ['vision.ai_confidence_min', '0.6', 'float', 'Below this AI confidence a submission is held for review'],
   ['vision.ai_hard_reject', 'true', 'bool', 'Let the AI reject outright when it is confident the photo is fake'],
   ['vision.model', 'nvidia/nemotron-3.5-super-vl:free', 'string', 'OpenRouter vision model used to verify tree photos'],

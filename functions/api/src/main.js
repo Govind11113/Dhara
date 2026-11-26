@@ -7,6 +7,7 @@ import { refreshLeaderboard, sync } from './routes/badges.js';
 import { submit as submitFeedback } from './routes/feedback.js';
 import { ADMIN_ROUTES } from './routes/admin.js';
 import * as footprint from './routes/footprint.js';
+import { UTILITY_ROUTES } from './routes/utilities.js';
 import { isAdminPath, requireAdmin } from './lib/admin.js';
 
 /**
@@ -34,6 +35,7 @@ const ROUTES = {
   '/footprint/save': footprint.save,
   '/footprint/delete': footprint.remove,
   '/footprint/methodology': footprint.methodologyRoute,
+  ...UTILITY_ROUTES,
   ...ADMIN_ROUTES,
 };
 
@@ -72,7 +74,7 @@ export default async ({ req, res, log, error }) => {
   const handler = ROUTES[path];
   if (!handler) {
     return res.json(
-      { ok: false, error: { code: 'not_found', message: `Unknown route ${path}` } },
+      { ok: false, error: { code: 'unknown_route', message: `Unknown route ${path}` } },
       404,
     );
   }

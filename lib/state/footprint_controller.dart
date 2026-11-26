@@ -12,7 +12,10 @@ import 'auth_controller.dart';
 /// back, so there is one implementation of the calculation.
 abstract class FootprintService {
   Future<FootprintResult> estimate(FootprintInputs inputs);
-  Future<FootprintResult> save(FootprintInputs inputs, String monthKey);
+  /// [sources] names the imported reading behind an input, for example
+  /// `{'electricityKwh': readingId}`. The server checks it and records where
+  /// the figure came from; it never changes the calculation.
+  Future<FootprintResult> save(FootprintInputs inputs, String monthKey, {Map<String, String> sources = const {}});
   Future<void> delete(String monthKey);
   Future<Methodology> methodology();
 }
@@ -36,11 +39,12 @@ class ApiFootprintService implements FootprintService {
       );
 
   @override
-  Future<FootprintResult> save(FootprintInputs inputs, String monthKey) async =>
+  Future<FootprintResult> save(FootprintInputs inputs, String monthKey, {Map<String, String> sources = const {}}) async =>
       _result(
         await _api.postIdempotent('/footprint/save', {
           'inputs': inputs.toJson(),
           'monthKey': monthKey,
+          if (sources.isNotEmpty) 'sources': sources,
         }),
       );
 

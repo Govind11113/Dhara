@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildPrompt,
+  isSpecificSpecies,
   decide,
   inspectPhoto,
   onUnavailable,
@@ -54,6 +55,97 @@ test('a species mismatch is only ever a review reason', () => {
   assert.deepEqual(out.reasons, ['ai_species_mismatch']);
 });
 
+// ---------------------------------------------------------------------------
+// "Other" / no declared species
+// ---------------------------------------------------------------------------
+
+const NO_SPECIES = ['Other', 'other', ' OTHER ', '', null, 'Unknown', 'Tree'];
+
+test('Other and empty declarations are not a specific species', () => {
+  for (const d of [...NO_SPECIES, undefined]) assert.equal(isSpecificSpecies(d), false, String(d));
+  for (const d of ['Neem', 'mango', 'Peepal']) assert.equal(isSpecificSpecies(d), true, d);
+});
+
+test('Other + speciesMatches=false creates no mismatch reason', () => {
+  for (const d of NO_SPECIES) {
+    const out = decide(parseVerdict({ ...genuine, speciesMatches: false }), {}, { declaredSpecies: d });
+    assert.equal(out.action, 'approve', String(d));
+    assert.deepEqual(out.reasons, [], String(d));
+  }
+});
+
+test('Other + speciesMatches=null is approved', () => {
+  const out = decide(parseVerdict({ ...genuine, species: 'unknown', speciesMatches: null }), {}, {
+    declaredSpecies: 'Other',
+  });
+  assert.equal(out.action, 'approve');
+  assert.deepEqual(out.reasons, []);
+});
+
+test('a specific species + speciesMatches=false still triggers review', () => {
+  for (const d of ['neem', 'Neem', 'Mango']) {
+    const out = decide(parseVerdict({ ...genuine, speciesMatches: false }), {}, { declaredSpecies: d });
+    assert.equal(out.action, 'review', d);
+    assert.deepEqual(out.reasons, ['ai_species_mismatch'], d);
+  }
+});
+
+test('decide(verdict, config) with no options keeps the old mismatch behaviour', () => {
+  const out = decide(parseVerdict({ ...genuine, speciesMatches: false }), {});
+  assert.equal(out.action, 'review');
+  assert.deepEqual(out.reasons, ['ai_species_mismatch']);
+});
+
+test('an explicit declaredSpecies: undefined skips the species mismatch', () => {
+  const out = decide(parseVerdict({ ...genuine, speciesMatches: false }), {}, {
+    declaredSpecies: undefined,
+  });
+  assert.equal(out.action, 'approve');
+  assert.deepEqual(out.reasons, []);
+});
+
+test('options without a declaredSpecies key keep the old mismatch behaviour', () => {
+  const out = decide(parseVerdict({ ...genuine, speciesMatches: false }), {}, {});
+  assert.deepEqual(out.reasons, ['ai_species_mismatch']);
+});
+
+test('Other does not weaken screen, non-plant or low-confidence protection', () => {
+  const other = { declaredSpecies: 'Other' };
+  const screen = decide(parseVerdict({ ...genuine, isRealPhoto: false, confidence: 0.9 }), {}, other);
+  assert.equal(screen.action, 'reject');
+  assert.deepEqual(screen.reasons, ['ai_screen_photo']);
+
+  const notPlant = decide(parseVerdict({ ...genuine, isPlant: false, confidence: 1 }), {}, other);
+  assert.equal(notPlant.action, 'reject');
+  assert.deepEqual(notPlant.reasons, ['ai_not_a_plant']);
+
+  // Unsure non-plant, below the confidence floor: held for review, not approved.
+  const unsure = decide(parseVerdict({ ...genuine, isPlant: false, confidence: 0.3 }), {}, other);
+  assert.equal(unsure.action, 'review');
+  assert.ok(unsure.reasons.includes('ai_not_a_plant'));
+
+  const low = decide(parseVerdict({ ...genuine, speciesMatches: null, confidence: 0.3 }), {}, other);
+  assert.equal(low.action, 'review');
+  assert.deepEqual(low.reasons, ['ai_low_confidence']);
+
+  // A screen photo flagged below the floor is still reviewed (no hard reject).
+  const softScreen = decide(parseVerdict({ ...genuine, isRealPhoto: false, confidence: 0.3 }), {}, other);
+  assert.equal(softScreen.action, 'review');
+  assert.ok(softScreen.reasons.includes('ai_screen_photo'));
+});
+
+test('the prompt for Other asks for no species judgement and a null match', () => {
+  for (const d of ['Other', 'other', '']) {
+    const p = buildPrompt(d, false);
+    assert.ok(!/says this is a/i.test(p), d);
+    assert.ok(/did not name a specific species/i.test(p), d);
+    assert.ok(/speciesMatches: always null/.test(p), d);
+    assert.ok(p.includes('ONLY a JSON object'));
+  }
+  const specific = buildPrompt('Neem', true);
+  assert.ok(specific.includes('The user says this is a Neem.'));
+  assert.ok(specific.includes('consistent with what the user said'));
+});
 test('hard reject can be turned off from config', () => {
   const out = decide(parseVerdict({ ...genuine, isRealPhoto: false }), {
     'vision.ai_hard_reject': false,

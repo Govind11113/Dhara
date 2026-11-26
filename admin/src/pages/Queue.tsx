@@ -2,8 +2,8 @@ import { useState } from 'react';
 
 import { api } from '../lib/appwrite';
 import { messageOf } from '../lib/api';
-import { explainReasons, explainVerdict, mapsUrl, percent, timeAgo } from '../lib/format';
-import type { QueueItem, QueueResult } from '../lib/types';
+import { explainReasons, explainVerdict, flagLabel, mapsUrl, percent, phashWarning, timeAgo } from '../lib/format';
+import type { QueueFlag, QueueItem, QueueResult } from '../lib/types';
 import { Empty, ErrorBox, PageHeader, Photo, Pill, ReasonDialog, Spinner, useLoad, useToast } from '../ui';
 
 interface DecideResult {
@@ -91,12 +91,13 @@ export function Queue() {
               )}
 
               <AiPanel item={item} />
+              <Warnings item={item} threshold={data?.phashThreshold} />
 
               <dl className="facts">
                 {item.reason && (
                   <>
                     <dt>Held because</dt>
-                    <dd>{explainReasons(item.reason).join('. ')}</dd>
+                    <dd>{explainReasons(item.reason).map((r) => r.replace(/\.$/, '')).join('. ')}</dd>
                   </>
                 )}
                 {typeof item.accuracyM === 'number' && (
@@ -171,6 +172,64 @@ export function Queue() {
         }}
       />
     </>
+  );
+}
+
+type Severity = 'critical' | 'high' | 'medium' | 'low';
+
+const SEVERITY_TONE: Record<Severity, 'bad' | 'warn' | 'neutral'> = {
+  critical: 'bad',
+  high: 'bad',
+  medium: 'warn',
+  low: 'neutral',
+};
+
+function toneOf(severity: string) {
+  return SEVERITY_TONE[severity as Severity] ?? 'neutral';
+}
+
+/**
+ * Fraud signals about this submission: the duplicate distance (check-ins) and
+ * every fraud flag filed against it. Shown only when there is something to say,
+ * or when the flags could not be loaded.
+ */
+export function Warnings({ item, threshold }: { item: QueueItem; threshold?: number }) {
+  const dup = phashWarning(item.phashDistanceToNearest, threshold);
+  const flags: QueueFlag[] = item.flags ?? [];
+  const unresolved = flags.filter((f) => !f.resolved).length + (dup ? 1 : 0);
+
+  if (item.flags === null) {
+    return (
+      <div className="ai ai-none" role="note">
+        <strong>Warnings</strong>
+        <span className="muted"> — could not be loaded. Check the Flags page before deciding.</span>
+      </div>
+    );
+  }
+  if (!dup && flags.length === 0) return null;
+
+  return (
+    <div className={`ai ${unresolved ? 'ai-none' : ''}`} role="note" aria-label="Warnings">
+      <div className="ai-head">
+        <strong>Warnings</strong>
+        <span className={unresolved ? 'warn-text' : 'muted'}> {unresolved} unresolved</span>
+      </div>
+      <ul className="ai-list">
+        {dup && (
+          <li>
+            <Pill value={dup.severity} tone={toneOf(dup.severity)} /> {dup.text}
+          </li>
+        )}
+        {flags.map((f, i) => (
+          <li key={`${f.kind}-${i}`} className={f.resolved ? 'muted' : undefined}>
+            <Pill value={f.severity} tone={f.resolved ? 'neutral' : toneOf(f.severity)} />{' '}
+            <strong>{flagLabel(f.kind)}</strong>
+            {f.detail && <span className="muted"> — {f.detail}</span>}
+            {f.resolved && <span className="muted"> (resolved)</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

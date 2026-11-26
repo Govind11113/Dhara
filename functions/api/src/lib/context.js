@@ -26,6 +26,8 @@ export const COL = {
   aiInspections: 'ai_inspections',
   adminActions: 'admin_actions',
   footprints: 'footprints',
+  utilityVerifications: 'utility_verifications',
+  utilityReadings: 'utility_readings',
 };
 
 export const BUCKET = {

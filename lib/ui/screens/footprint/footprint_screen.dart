@@ -10,15 +10,23 @@ import '../../../core/utils/errors.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../core/utils/tree_co2.dart';
 import '../../../data/models/footprint.dart';
+import '../../../data/models/utility.dart';
 import '../../../state/footprint_controller.dart';
 import '../../../state/trees_controller.dart';
+import '../../../state/utility_controller.dart';
 import '../../widgets/common.dart';
 import '../../widgets/footprint_widgets.dart';
+import '../utility/utility_history_screen.dart';
+import '../utility/utility_verify_screen.dart';
 import 'methodology_screen.dart';
 
 /// The months a footprint can be filed under, newest first.
+///
+/// Counted from the current UTC month, because that is what the server checks
+/// a month against. Using the phone's local date offered a month the server
+/// rejected for the first five and a half hours of every month in India.
 List<String> recentMonthKeys({DateTime? now, int count = 12}) {
-  final n = now ?? DateTime.now();
+  final n = now ?? DateTime.now().toUtc();
   return [
     for (var i = 0; i < count; i++)
       DateFormat('yyyy-MM').format(DateTime.utc(n.year, n.month - i, 1)),
@@ -84,6 +92,16 @@ class _FootprintScreenState extends ConsumerState<FootprintScreen> {
   bool _busy = false;
   String? _error;
   bool _prefilled = false;
+
+  /// The bill the electricity figure was imported from. It only counts as the
+  /// source while the figure and month still match it: edited, the number is
+  /// the user's own and is saved as such.
+  UtilityReading? _imported;
+
+  bool get _importedInUse =>
+      _imported != null &&
+      _imported!.monthKey == _month &&
+      (_num(_kwh) - _imported!.consumptionValue).abs() < 0.001;
 
   @override
   void initState() {
@@ -182,15 +200,50 @@ class _FootprintScreenState extends ConsumerState<FootprintScreen> {
   Future<void> _save() => _run(
         () async {
           final saved =
-              await ref.read(footprintServiceProvider).save(_inputs(), _month);
+              await ref.read(footprintServiceProvider).save(
+                    _inputs(),
+                    _month,
+                    sources: _importedInUse ? {'electricityKwh': _imported!.id} : const {},
+                  );
           ref.invalidate(footprintHistoryProvider);
-          return saved;
+          ref.invalidate(utilityHistoryProvider);          return saved;
         },
         done: 'Saved for ${monthLabel(_month)}.',
       );
 
-  Future<void> _delete(FootprintEntry entry) async {
-    final ok = await showDialog<bool>(
+  /// Fills the electricity figure from an imported bill, in the month the bill
+  /// belongs to.
+  void _useReading(UtilityReading r) {
+    if (!_months.contains(r.monthKey)) {
+      showSnack(
+        context,
+        'That bill is for ${monthLabel(r.monthKey)}, which is too old to add here.',
+        isError: true,
+      );
+      return;
+    }
+    final saved = ref.read(footprintHistoryProvider).value ?? const <FootprintEntry>[];
+    if (r.monthKey != _month) {
+      setState(() => _month = r.monthKey);
+      _load(_entryFor(r.monthKey, saved));
+    }
+    setState(() {
+      _imported = r;
+      _kwh.text = _show(r.consumptionValue);
+    });
+  }
+
+  Future<void> _importElectricity() async {
+    final r = await UtilityVerifyScreen.push(context, UtilityType.electricity);
+    if (r != null && mounted) _useReading(r);
+  }
+
+  Future<void> _pickImported() async {
+    final r = await UtilityHistoryScreen.push(context, pickFor: _month);
+    if (r != null && mounted) _useReading(r);
+  }
+
+  Future<void> _delete(FootprintEntry entry) async {    final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text('Delete ${entry.label}?'),
@@ -292,7 +345,13 @@ class _FootprintScreenState extends ConsumerState<FootprintScreen> {
             ),
 
             const _Heading('At home, this month'),
-            _Field(
+            _ImportCard(
+              onElectricity: _busy ? null : _importElectricity,
+              onGas: _busy ? null : () => UtilityVerifyScreen.push(context, UtilityType.png),
+              onHistory: _busy ? null : _pickImported,
+            ),
+            if (_importedInUse)
+              _ImportedNote(reading: _imported!),            _Field(
               controller: _kwh,
               label: 'Electricity used',
               suffix: 'kWh',
@@ -425,7 +484,19 @@ class _FootprintScreenState extends ConsumerState<FootprintScreen> {
                 _HistoryRow(
                   entry: e,
                   onOpen: () {
-                    setState(() => _month = _months.contains(e.monthKey) ? e.monthKey : _month);
+                    // Only months that can still be filed open into the form.
+                    // An older one used to load its numbers under whichever
+                    // month was selected, and "Update" then overwrote that
+                    // month with them.
+                    if (!_months.contains(e.monthKey)) {
+                      showSnack(
+                        context,
+                        '${monthLabel(e.monthKey)} is too old to edit. '
+                        'Only the last ${_months.length} months can be changed.',
+                      );
+                      return;
+                    }
+                    setState(() => _month = e.monthKey);
                     _load(e);
                   },
                   onDelete: () => _delete(e),
@@ -776,4 +847,90 @@ class _HistoryRow extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// Entry to bill import: electricity fills the field below; piped gas is
+/// recorded in history, with its carbon pending a verified factor.
+class _ImportCard extends StatelessWidget {
+  const _ImportCard({required this.onElectricity, required this.onGas, required this.onHistory});
+
+  final VoidCallback? onElectricity;
+  final VoidCallback? onGas;
+  final VoidCallback? onHistory;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: DharaCard(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Import from your bill',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.forest),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Use the consumption on your electricity bill instead of typing it.',
+                style: TextStyle(fontSize: 12, height: 1.4, color: AppColors.inkSoft),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    key: const Key('import-electricity'),
+                    onPressed: onElectricity,
+                    icon: const Icon(Icons.bolt_rounded, size: 18),
+                    label: const Text('Electricity'),
+                    style: OutlinedButton.styleFrom(minimumSize: const Size(0, 42)),
+                  ),
+                  OutlinedButton.icon(
+                    key: const Key('import-gas'),
+                    onPressed: onGas,
+                    icon: const Icon(Icons.local_fire_department_rounded, size: 18),
+                    label: const Text('Piped gas'),
+                    style: OutlinedButton.styleFrom(minimumSize: const Size(0, 42)),
+                  ),
+                  TextButton(
+                    key: const Key('import-history'),
+                    onPressed: onHistory,
+                    style: TextButton.styleFrom(minimumSize: const Size(0, 42)),
+                    child: const Text('My bills'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+/// Says where the electricity figure came from while it still matches the bill.
+class _ImportedNote extends StatelessWidget {
+  const _ImportedNote({required this.reading});
+
+  final UtilityReading reading;
+
+  @override
+  Widget build(BuildContext context) {
+    final when = DateFormat('d MMM').format(reading.periodStart);
+    final until = DateFormat('d MMM yyyy').format(reading.periodEnd);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        'Electricity consumption imported from your bill ($when \u2013 $until). '
+        '${sourceLabel(reading.status)}.',
+        key: const Key('imported-note'),
+        style: const TextStyle(
+          fontSize: 12,
+          height: 1.4,
+          fontWeight: FontWeight.w700,
+          color: AppColors.amber,
+        ),
+      ),
+    );
+  }
 }

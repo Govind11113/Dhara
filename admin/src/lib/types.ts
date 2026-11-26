@@ -60,11 +60,24 @@ export interface QueueItem {
   aiVerdict?: string;
   aiConfidence?: number;
   aiModel?: string;
+  /** Distance to the nearest earlier photo. Check-ins only; null for trees or when not recorded. */
+  phashDistanceToNearest?: number | null;
+  /** Fraud flags filed against this item. null = the lookup failed; [] = none. */
+  flags?: QueueFlag[] | null;
+}
+
+export interface QueueFlag {
+  kind: string;
+  severity: 'low' | 'medium' | 'high' | 'critical' | string;
+  detail: string;
+  resolved: boolean;
 }
 
 export interface QueueResult {
   items: QueueItem[];
   counts: { trees: number; verifications: number };
+  /** fraud.phash_hamming_threshold; absent from older servers. */
+  phashThreshold?: number;
 }
 
 export interface Profile extends Doc {

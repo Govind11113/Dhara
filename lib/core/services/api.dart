@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:appwrite/enums.dart' as enums;
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/env.dart';
@@ -103,8 +104,19 @@ class Api {
 
     final error = decoded['error'];
     if (error is Map<String, dynamic>) {
+      final code = (error['code'] ?? 'unknown') as String;
+      // Development builds only. The request body is never logged: it can hold
+      // consumer numbers and locations. The server's code and the request ID
+      // are enough to find the call in the function's logs.
+      if (kDebugMode) {
+        debugPrint(
+          'api $path -> HTTP ${execution.responseStatusCode} '
+          'code=$code execution=${execution.$id}'
+          '${body['requestId'] is String ? ' requestId=${body['requestId']}' : ''}',
+        );
+      }
       throw ApiFailure(
-        (error['code'] ?? 'unknown') as String,
+        code,
         (error['message'] ?? 'Request failed') as String,
         details: error['details'] is Map<String, dynamic>
             ? error['details'] as Map<String, dynamic>
@@ -139,12 +151,14 @@ class Api {
 
   // --- Profile -------------------------------------------------------------
 
-  /// Creates the profile row on first login. Idempotent server-side.
+  /// Creates the profile row on first login. Idempotent server-side, so it is
+  /// safe to retry once when a cold function runtime gives no answer: without
+  /// that, a brand-new user's first sign-in failed after the code was accepted.
   Future<Map<String, dynamic>> bootstrapProfile({
     required String name,
     String? referredBy,
   }) =>
-      post('/profile/bootstrap', {
+      postIdempotent('/profile/bootstrap', {
         'name': name,
         if (referredBy != null && referredBy.isNotEmpty) 'referredBy': referredBy,
       });
