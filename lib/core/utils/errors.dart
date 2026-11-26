@@ -13,6 +13,11 @@ String friendlyMessage(Object? error) {
   if (error == null) return 'Something went wrong. Please try again.';
 
   return switch (error) {
+    // The server does not have this endpoint: an app newer than the deployed
+    // server. Say what that means for the user instead of "Unknown route".
+    ApiFailure() when isUnknownRoute(error) =>
+      'Dhara\u2019s server has not been updated for this feature yet, so it '
+          'cannot be saved or loaded right now. Nothing you entered was lost.',
     ApiFailure(:final message) => message,
     LocationFailure(:final message) => message,
     // Raised by photo processing when a capture cannot be decoded.
@@ -21,3 +26,11 @@ String friendlyMessage(Object? error) {
     _ => friendlyError(error),
   };
 }
+
+/// True when the server answered that it has no such endpoint. Servers built
+/// from this branch say `unknown_route`; older ones say `not_found` with an
+/// "Unknown route" message, which is told apart from an ordinary missing record
+/// by that wording.
+bool isUnknownRoute(ApiFailure e) =>
+    e.code == 'unknown_route' ||
+    (e.code == 'not_found' && e.message.startsWith('Unknown route'));

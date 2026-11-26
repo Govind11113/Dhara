@@ -1,0 +1,105 @@
+{
+  "regions": [
+    {
+      "country": "IN",
+      "countryName": "India",
+      "states": [
+        {
+          "code": "MH",
+          "name": "Maharashtra"
+        }
+      ]
+    }
+  ],
+  "providers": [
+    {
+      "id": "msedcl",
+      "utilityType": "electricity",
+      "country": "IN",
+      "state": "MH",
+      "name": "MSEDCL (Mahavitaran)",
+      "serviceAreas": [],
+      "accountLabel": "Consumer number",
+      "accountHelp": "The 12-digit consumer number printed near the top of your bill.",
+      "accountPattern": "^[0-9]{12}$",
+      "consumptionUnit": "kWh"
+    },
+    {
+      "id": "adani_mumbai",
+      "utilityType": "electricity",
+      "country": "IN",
+      "state": "MH",
+      "name": "Adani Electricity Mumbai",
+      "serviceAreas": [
+        "Mumbai"
+      ],
+      "accountLabel": "Account number",
+      "accountHelp": "The account number printed on your Adani Electricity bill.",
+      "accountPattern": "^[A-Z0-9-]{6,20}$",
+      "consumptionUnit": "kWh"
+    },
+    {
+      "id": "tata_power_mumbai",
+      "utilityType": "electricity",
+      "country": "IN",
+      "state": "MH",
+      "name": "Tata Power Mumbai",
+      "serviceAreas": [
+        "Mumbai"
+      ],
+      "accountLabel": "CA number",
+      "accountHelp": "The consumer account (CA) number printed on your Tata Power bill.",
+      "accountPattern": "^[A-Z0-9-]{6,20}$",
+      "consumptionUnit": "kWh"
+    },
+    {
+      "id": "best_mumbai",
+      "utilityType": "electricity",
+      "country": "IN",
+      "state": "MH",
+      "name": "BEST Mumbai",
+      "serviceAreas": [
+        "Mumbai"
+      ],
+      "accountLabel": "Consumer number",
+      "accountHelp": "The consumer number printed on your BEST electricity bill.",
+      "accountPattern": "^[A-Z0-9-]{6,20}$",
+      "consumptionUnit": "kWh"
+    },
+    {
+      "id": "mgl",
+      "utilityType": "png",
+      "country": "IN",
+      "state": "MH",
+      "name": "Mahanagar Gas (MGL)",
+      "serviceAreas": [
+        "Mumbai",
+        "Thane",
+        "Navi Mumbai",
+        "Raigad"
+      ],
+      "accountLabel": "BP number",
+      "accountHelp": "The business partner (BP) number printed on your MGL gas bill.",
+      "accountPattern": "^[A-Z0-9-]{6,20}$",
+      "consumptionUnit": "SCM"
+    },
+    {
+      "id": "mngl",
+      "utilityType": "png",
+      "country": "IN",
+      "state": "MH",
+      "name": "Maharashtra Natural Gas (MNGL)",
+      "serviceAreas": [
+        "Pune"
+      ],
+      "accountLabel": "BP number",
+      "accountHelp": "The customer or BP number printed on your MNGL gas bill.",
+      "accountPattern": "^[A-Z0-9-]{6,20}$",
+      "consumptionUnit": "SCM"
+    }
+  ],
+  "consent": {
+    "version": "2026-11-01",
+    "purpose": "Store the utility bill details and consumption I provide to calculate my carbon footprint."
+  }
+}

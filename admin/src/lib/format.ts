@@ -140,11 +140,69 @@ const REASON_TEXT: Record<string, string> = {
 export function explainReasons(raw: string | undefined | null): string[] {
   const text = (raw ?? '').trim();
   if (!text) return [];
+  const isCode = (t: string) => /^[a-z]+(_[a-z]+)+$/.test(t);
   const tokens = text.split(/\s+/);
-  if (tokens.every((t) => /^[a-z]+(_[a-z]+)+$/.test(t))) {
-    return tokens.map((t) => REASON_TEXT[t] ?? humanise(t));
+  // A plain sentence with no codes in it is shown exactly as written.
+  if (!tokens.some(isCode)) return [text];
+  // The server joins codes and sentences with spaces, so a held submission can
+  // read "ai_unavailable We could not clearly see a plant in that photo.".
+  // Each code becomes its own line; the words between codes stay together.
+  const out: string[] = [];
+  let words: string[] = [];
+  const flush = () => {
+    if (words.length) out.push(words.join(' '));
+    words = [];
+  };
+  for (const t of tokens) {
+    if (isCode(t)) {
+      flush();
+      out.push(REASON_TEXT[t] ?? humanise(t));
+    } else {
+      words.push(t);
+    }
   }
-  return [text];
+  flush();
+  return out;
+}
+
+const FLAG_TEXT: Record<string, string> = {
+  duplicate_photo: 'Duplicate photo',
+  not_a_plant: 'Plant not clearly seen',
+  mock_location: 'Fake GPS location',
+  out_of_radius: 'Too far from the tree',
+  poor_gps_accuracy: 'Poor GPS accuracy',
+  integrity_failed: 'Device integrity check failed',
+  velocity_abuse: 'Too many attempts too quickly',
+  self_transfer: 'Transfer to own account',
+  token_expired: 'Expired transfer code',
+  duplicate_consumer_no: 'Electricity account already used',
+  manual_report: 'Reported or refused by the AI',
+};
+
+/** Readable name for a fraud flag `kind`. */
+export function flagLabel(kind: string | undefined | null): string {
+  const k = String(kind ?? '');
+  return FLAG_TEXT[k] ?? humanise(k);
+}
+
+/**
+ * What the distance to the nearest earlier photo means. 64 is "no earlier
+ * photo to compare with". At or below the threshold the server would have
+ * refused the photo outright; up to twice the threshold it is close enough to
+ * be worth a look.
+ */
+export function phashWarning(
+  distance: number | null | undefined,
+  threshold = 8,
+): { severity: 'high' | 'medium'; text: string } | null {
+  if (distance === null || distance === undefined || !Number.isFinite(distance) || distance >= 64) return null;
+  if (distance <= threshold) {
+    return { severity: 'high', text: `Duplicate photo: ${distance} bits from an earlier photo (limit ${threshold})` };
+  }
+  if (distance <= threshold * 2) {
+    return { severity: 'medium', text: `Possible near-duplicate: ${distance} bits from an earlier photo` };
+  }
+  return null;
 }
 
 export function plural(n: number, one: string, many = `${one}s`): string {

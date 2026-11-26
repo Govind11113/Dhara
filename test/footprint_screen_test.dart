@@ -22,6 +22,7 @@ class FakeService implements FootprintService {
   final calls = <String>[];
   FootprintInputs? lastInputs;
   String? lastMonth;
+  Map<String, String> lastSources = const {};
   Object? failWith;
   Object? methodologyFails;
 
@@ -36,10 +37,11 @@ class FakeService implements FootprintService {
   }
 
   @override
-  Future<FootprintResult> save(FootprintInputs inputs, String monthKey) async {
+  Future<FootprintResult> save(FootprintInputs inputs, String monthKey, {Map<String, String> sources = const {}}) async {
     calls.add('save');
     lastInputs = inputs;
     lastMonth = monthKey;
+    lastSources = sources;
     if (failWith != null) throw failWith!;
     return result;
   }

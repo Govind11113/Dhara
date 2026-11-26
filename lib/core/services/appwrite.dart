@@ -100,13 +100,25 @@ String friendlyError(Object error) {
     if ((error.code ?? 0) >= 500) {
       return 'Our servers are having a moment. Try again shortly.';
     }
+    // The SDK wraps a dropped connection in an AppwriteException with no
+    // status code and the raw socket error as its message. That text means
+    // nothing to a user, so it must not be shown as-is.
+    if (error.code == null && _looksOffline(message)) {
+      return _offlineMessage;
+    }
     return message;
   }
-  final text = error.toString();
-  if (text.contains('SocketException') ||
-      text.contains('Failed host lookup') ||
-      text.contains('ClientException')) {
-    return 'No internet connection.';
-  }
+  if (_looksOffline(error.toString())) return _offlineMessage;
   return 'Something went wrong. Please try again.';
 }
+
+const _offlineMessage =
+    'Unable to connect to Dhara\u2019s server. Check your internet connection.';
+
+bool _looksOffline(String text) =>
+    text.contains('SocketException') ||
+    text.contains('Failed host lookup') ||
+    text.contains('ClientException') ||
+    text.contains('Connection refused') ||
+    text.contains('Connection reset') ||
+    text.contains('Network is unreachable');

@@ -163,7 +163,7 @@ async function screenSubmission({
 
   const ai =
     meta.status === 'ok'
-      ? decide(verdict, config)
+      ? decide(verdict, config, { declaredSpecies })
       : meta.status === 'skipped'
         ? { action: 'approve', reasons: [], confidence: 0 }
         : onUnavailable(config);
