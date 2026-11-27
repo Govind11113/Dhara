@@ -28,6 +28,7 @@ export const COL = {
   footprints: 'footprints',
   utilityVerifications: 'utility_verifications',
   utilityReadings: 'utility_readings',
+  plantingRequests: 'planting_requests',
 };
 
 export const BUCKET = {

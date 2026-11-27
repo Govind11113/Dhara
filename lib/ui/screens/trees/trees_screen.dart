@@ -7,10 +7,12 @@ import '../../../core/utils/errors.dart';
 import '../../../core/utils/haptics.dart';
 import '../../../data/models/tree.dart';
 import '../../../state/auth_controller.dart';
+import '../../../state/planting_controller.dart';
 import '../../../state/trees_controller.dart';
 import '../../widgets/common.dart';
 import '../home/dashboard_shell.dart';
 import 'plant_tree_screen.dart';
+import 'planting_requests_screen.dart';
 import 'tree_detail_screen.dart';
 import 'verify_tree_screen.dart';
 
@@ -137,6 +139,8 @@ class TreesScreen extends ConsumerWidget {
                 ).animate().fadeIn(duration: 320.ms),
               ),
 
+              const SliverToBoxAdapter(child: _PlantingEntry()),
+
               ...switch (trees) {
                 AsyncError(:final error) => [
                     SliverFillRemaining(
@@ -211,6 +215,69 @@ class TreesScreen extends ConsumerWidget {
         ),
       ),
     ];
+  }
+}
+
+/// A way in to "ask the NGO for a place to plant", shown above the tree list.
+///
+/// When the NGO has replied and is waiting on the member, it says so, because a
+/// reply nobody notices is a planting that never happens.
+class _PlantingEntry extends ConsumerWidget {
+  const _PlantingEntry();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final waiting = ref.watch(plantingNeedingAnswerProvider);
+    final hasReply = waiting > 0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: DharaCard(
+        onTap: () => PlantingRequestsScreen.push(context),
+        color: hasReply ? AppColors.limeSoft : AppColors.surface,
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Icon(
+              hasReply ? Icons.event_available_rounded : Icons.park_rounded,
+              color: hasReply ? AppColors.amber : AppColors.green,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    hasReply
+                        ? (waiting == 1
+                            ? 'A planting place is ready for you'
+                            : '$waiting planting places are ready for you')
+                        : 'Need a place to plant?',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.forest,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    hasReply
+                        ? 'Tap to confirm the time.'
+                        : 'Ask our partner NGO for a spot and a time to meet.',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.inkSoft,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.inkFaint),
+          ],
+        ),
+      ),
+    );
   }
 }
 

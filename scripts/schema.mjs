@@ -568,6 +568,45 @@ export const COLLECTIONS = [
   },
 
   {
+    id: 'planting_requests',
+    name: 'Planting Requests',
+    ...SERVER_ONLY,
+    // A member asks the partner NGO for a place to plant a tree; the NGO answers
+    // with a site, a time and a meeting point. Written only by the api function,
+    // readable by its owner. The NGO reads through /ngo/ routes, never directly.
+    attributes: [
+      S('userId', 64, true),
+      S('userName', 128),
+      F('lat', false, null, -90, 90),
+      F('lng', false, null, -180, 180),
+      S('geohash', 16),
+      S('addressLabel', 256),
+      S('note', 500),
+      D('preferredFrom'),
+      D('preferredTo'),
+      E('status', ['open', 'scheduled', 'confirmed', 'declined', 'completed', 'cancelled'], true, 'open'),
+      // The NGO's reply.
+      F('siteLat', false, null, -90, 90),
+      F('siteLng', false, null, -180, 180),
+      S('siteAddress', 256),
+      D('meetingAt'),
+      S('meetingPoint', 256),
+      S('replyNotes', 500),
+      S('repliedBy', 64),
+      D('repliedAt'),
+      // The member's answer to the reply.
+      S('userResponse', 16),
+      D('respondedAt'),
+      D('createdAt', true),
+      D('updatedAt', true),
+    ],
+    indexes: [
+      idx('idx_user_time', ['userId', 'createdAt'], IndexType.Key, ['ASC', 'DESC']),
+      idx('idx_status_time', ['status', 'createdAt'], IndexType.Key, ['ASC', 'DESC']),
+    ],
+  },
+
+  {
     id: 'ai_inspections',
     name: 'AI Inspections',
     ...SERVER_ONLY,
