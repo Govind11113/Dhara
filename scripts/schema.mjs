@@ -845,7 +845,7 @@ export const BUCKETS = [
 
 export const CONFIG_SEED = [
   ['tree.verify_radius_m', '30', 'int', 'User must stand within this many metres of the tree'],
-  ['tree.min_spacing_m', '3', 'int', 'Two distinct trees must be at least this far apart'],
+  ['tree.min_spacing_cm', '30', 'int', 'Two distinct trees must be at least this many centimetres apart'],
   ['tree.max_gps_accuracy_m', '20', 'int', 'Reject GPS fixes worse than this'],
   ['tree.plant_credits', '5', 'int', 'Credits granted at planting'],
   ['tree.credits_per_verification', '10', 'int', 'Credits per approved monthly check-in'],
