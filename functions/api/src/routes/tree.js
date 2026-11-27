@@ -15,6 +15,7 @@ import {
 import { award, bumpStats, checkAndStorePhash, flag, notify } from '../lib/ledger.js';
 import { decide, inspectPhoto, onUnavailable, summarise } from '../lib/vision.js';
 import { recordInspection } from '../lib/inspections.js';
+import { assertSpacing } from '../lib/tree_spacing.js';
 
 const MARKER_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -267,28 +268,9 @@ export async function plant({ databases, storage, user, body, config, log }) {
     log,
   });
 
-  // Two trees cannot occupy the same spot. Geohash prefix keeps this a bounded
-  // query: precision 7 is roughly a 150 m cell.
-  const minSpacing = num(config['tree.min_spacing_m'], 3);
-  const cell = geohash(lat, lng, 7);
-  const nearby = await databases.listDocuments(DB, COL.trees, [
-    Query.startsWith('geohash', cell),
-    Query.limit(100),
-  ]);
-
-  for (const other of nearby.documents) {
-    const d = distanceM(lat, lng, other.lat, other.lng);
-    if (d < minSpacing) {
-      const mine = other.ownerId === user.$id;
-      throw new Rejected(
-        'too_close',
-        mine
-          ? `You already registered "${other.nickname || other.speciesName}" ${Math.round(d)} m away. Trees must be at least ${minSpacing} m apart.`
-          : `Another member already registered a tree ${Math.round(d)} m from here.`,
-        { distanceM: Math.round(d) },
-      );
-    }
-  }
+  // Two trees cannot occupy the same spot (`tree.min_spacing_cm`, 30 cm by
+  // default). See lib/tree_spacing.js.
+  await assertSpacing(databases, { lat, lng, userId: user.$id, config });
 
   const species = await loadSpecies(databases, speciesCode);
   const vestingMonths = num(config['tree.vesting_months'], 12);
