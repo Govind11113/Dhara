@@ -28,7 +28,7 @@ export function Login({ message }: { message?: string }) {
     <main className="login">
       <form className="login-card" onSubmit={submit} aria-labelledby="login-title">
         <h1 id="login-title">Dhara Admin</h1>
-        <p className="muted">Sign in with an administrator account.</p>
+        <p className="muted">Sign in with your administrator or NGO account.</p>
 
         {shown && (
           <div className="error-box" role="alert">

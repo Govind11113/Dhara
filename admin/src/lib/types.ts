@@ -260,3 +260,32 @@ export interface Report {
   byCity: { city: string; trees: number }[];
   footprint: FootprintReport;
 }
+
+/** A member's request for a planting place, as the /ngo/ routes return it. */
+export interface PlantingRequest {
+  id: string;
+  status: 'open' | 'scheduled' | 'confirmed' | 'declined' | 'completed' | 'cancelled';
+  userName?: string;
+  lat?: number;
+  lng?: number;
+  addressLabel?: string;
+  note?: string;
+  preferredFrom?: string;
+  preferredTo?: string;
+  siteLat?: number;
+  siteLng?: number;
+  siteAddress?: string;
+  meetingAt?: string;
+  meetingPoint?: string;
+  replyNotes?: string;
+  repliedAt?: string;
+  userResponse?: string;
+  respondedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface PlantingPage {
+  requests: PlantingRequest[];
+  nextCursor: string | null;
+}

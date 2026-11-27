@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AppwriteException } from 'appwrite';
 
+import { roleFromLabels, whoamiPath, type Role } from './access';
 import { ApiError, messageOf } from './lib/api';
 import { account, api, clearJwt } from './lib/appwrite';
 
@@ -13,7 +14,7 @@ export interface AdminUser {
 type AuthState =
   | { status: 'loading' }
   | { status: 'signedOut'; message?: string }
-  | { status: 'admin'; user: AdminUser };
+  | { status: 'signedIn'; role: Role; user: AdminUser };
 
 interface AuthContextValue {
   state: AuthState;
@@ -23,28 +24,30 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const NOT_ADMIN = 'This account is not an administrator, so it has been signed out.';
+const NO_ACCESS = 'This account is not an administrator or NGO account, so it has been signed out.';
 
-class NotAdmin extends Error {}
+class NoAccess extends Error {}
 
 /**
- * Confirms the current session belongs to an admin.
+ * Confirms the current session belongs to an admin or an NGO account, and says
+ * which.
  *
  * The label on the account is checked here only to fail fast. The authority is
- * the server: /admin/whoami runs behind the same gate as every other admin
- * route, so a doctored client cannot get past it.
+ * the server: /admin/whoami and /ngo/whoami run behind the same gates as every
+ * other route under their prefix, so a doctored client cannot get past them.
  */
-async function verifyAdmin(): Promise<AdminUser> {
+async function verifyAccount(): Promise<{ role: Role; user: AdminUser }> {
   const user = await account.get();
-  if (!user.labels.includes('admin')) throw new NotAdmin();
+  const role = roleFromLabels(user.labels);
+  if (!role) throw new NoAccess();
 
   try {
-    await api.call('/admin/whoami');
+    await api.call(whoamiPath(role));
   } catch (e) {
-    if (e instanceof ApiError && e.code === 'forbidden') throw new NotAdmin();
+    if (e instanceof ApiError && e.code === 'forbidden') throw new NoAccess();
     throw e;
   }
-  return { id: user.$id, email: user.email, name: user.name };
+  return { role, user: { id: user.$id, email: user.email, name: user.name } };
 }
 
 async function dropSession(): Promise<void> {
@@ -76,11 +79,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       let next: AuthState;
       try {
-        next = { status: 'admin', user: await verifyAdmin() };
+        next = { status: 'signedIn', ...(await verifyAccount()) };
       } catch (e) {
-        if (e instanceof NotAdmin) {
+        if (e instanceof NoAccess) {
           await dropSession();
-          next = { status: 'signedOut', message: NOT_ADMIN };
+          next = { status: 'signedOut', message: NO_ACCESS };
         } else if (e instanceof AppwriteException && e.code === 401) {
           // No session yet: the normal first visit.
           next = { status: 'signedOut' };
@@ -108,12 +111,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      setState({ status: 'admin', user: await verifyAdmin() });
+      setState({ status: 'signedIn', ...(await verifyAccount()) });
     } catch (e) {
       await dropSession();
-      if (e instanceof NotAdmin) {
-        setState({ status: 'signedOut', message: NOT_ADMIN });
-        throw new Error(NOT_ADMIN);
+      if (e instanceof NoAccess) {
+        setState({ status: 'signedOut', message: NO_ACCESS });
+        throw new Error(NO_ACCESS);
       }
       setState({ status: 'signedOut' });
       throw new Error(messageOf(e));

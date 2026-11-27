@@ -327,6 +327,43 @@ class Api {
         'deviceModel': deviceModel,
       });
 
+  // --- Planting requests ---------------------------------------------------
+
+  /// Asks the partner NGO for a place to plant. Not retried blindly: a repeat
+  /// of a call that had landed would make a second request.
+  Future<Map<String, dynamic>> requestPlanting({
+    double? lat,
+    double? lng,
+    String addressLabel = '',
+    String note = '',
+    DateTime? preferredFrom,
+    DateTime? preferredTo,
+  }) =>
+      post('/planting/request', {
+        if (lat != null && lng != null) ...{'lat': lat, 'lng': lng},
+        'addressLabel': addressLabel,
+        'note': note,
+        'preferredFrom': preferredFrom?.toUtc().toIso8601String(),
+        'preferredTo': preferredTo?.toUtc().toIso8601String(),
+      });
+
+  /// A read, so a cold function runtime gets one retry.
+  Future<Map<String, dynamic>> myPlantingRequests() =>
+      postIdempotent('/planting/mine');
+
+  /// Answers the NGO's proposed slot. [accept] false declines it.
+  Future<Map<String, dynamic>> respondToPlanting({
+    required String id,
+    required bool accept,
+  }) =>
+      post('/planting/respond', {
+        'id': id,
+        'response': accept ? 'accept' : 'decline',
+      });
+
+  Future<Map<String, dynamic>> cancelPlanting(String id) =>
+      post('/planting/cancel', {'id': id});
+
   // --- Gamification --------------------------------------------------------
 
   Future<Map<String, dynamic>> syncBadges() => post('/badges/sync');

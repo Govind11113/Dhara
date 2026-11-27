@@ -9,6 +9,9 @@ import { ADMIN_ROUTES } from './routes/admin.js';
 import * as footprint from './routes/footprint.js';
 import { UTILITY_ROUTES } from './routes/utilities.js';
 import { isAdminPath, requireAdmin } from './lib/admin.js';
+import { isNgoPath, requireNgo } from './lib/ngo.js';
+import { PLANTING_ROUTES } from './routes/planting.js';
+import { NGO_ROUTES } from './routes/ngo.js';
 
 /**
  * Single entry point for every privileged operation in Dhara.
@@ -36,6 +39,8 @@ const ROUTES = {
   '/footprint/delete': footprint.remove,
   '/footprint/methodology': footprint.methodologyRoute,
   ...UTILITY_ROUTES,
+  ...PLANTING_ROUTES,
+  ...NGO_ROUTES,
   ...ADMIN_ROUTES,
 };
 
@@ -84,6 +89,8 @@ export default async ({ req, res, log, error }) => {
     // One gate for the whole /admin/ prefix, ahead of any handler or database
     // read, so no individual admin route can forget to check.
     if (isAdminPath(path)) requireAdmin(user);
+    // Same idea for the NGO area: one gate for the whole /ngo/ prefix.
+    if (isNgoPath(path)) requireNgo(user);
     const { databases, users, client, storage } = services(req);
     const config = await loadConfig(databases);
     const body = parseBody(req);

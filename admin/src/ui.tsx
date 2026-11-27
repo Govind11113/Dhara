@@ -131,8 +131,8 @@ export function Empty({ title, hint }: { title: string; hint?: string }) {
 type Tone = 'good' | 'warn' | 'bad' | 'info' | 'neutral';
 
 const TONES: Record<string, Tone> = {
-  alive: 'good', approved: 'good', fulfilled: 'good', answered: 'good', approve: 'good', ok: 'good', resolved: 'good',
-  pending_review: 'warn', manual_review: 'warn', pending: 'warn', open: 'warn', review: 'warn', processing: 'info', triaged: 'info',
+  alive: 'good', approved: 'good', confirmed: 'good', completed: 'good', fulfilled: 'good', answered: 'good', approve: 'good', ok: 'good', resolved: 'good',
+  pending_review: 'warn', manual_review: 'warn', pending: 'warn', open: 'warn', review: 'warn', processing: 'info', triaged: 'info', scheduled: 'info', declined: 'warn',
   rejected: 'bad', dead: 'bad', failed: 'bad', reject: 'bad', unavailable: 'bad', cancelled: 'neutral', closed: 'neutral',
   critical: 'bad', high: 'bad', medium: 'warn', low: 'neutral', at_risk: 'warn', missed: 'warn', skipped: 'neutral',
 };
