@@ -277,7 +277,7 @@ function ReplyFormView({
         </div>
       )}
 
-      <label htmlFor={`${id}-site`}>Planting site (address)</label>
+      <label htmlFor={`${id}-site`}>Planting site address</label>
       <input
         id={`${id}-site`}
         className="wide"
@@ -285,15 +285,6 @@ function ReplyFormView({
         value={form.siteAddress}
         onChange={set('siteAddress')}
         required
-      />
-
-      <label htmlFor={`${id}-map`}>Map link or pin (optional)</label>
-      <input
-        id={`${id}-map`}
-        className="wide"
-        placeholder="Paste a maps link, or 12.9763, 77.5929"
-        value={form.mapLink}
-        onChange={set('mapLink')}
       />
 
       <label htmlFor={`${id}-time`}>Date and time to meet</label>

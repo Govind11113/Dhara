@@ -22,3 +22,5 @@ dist/
 
 # Local scratch script with a path from this machine in it
 scripts/_sdkprobe.py
+# Widget Preview related
+.widget_preview/

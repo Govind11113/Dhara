@@ -122,11 +122,13 @@ class _PlantingDetailScreenState extends ConsumerState<PlantingDetailScreen> {
     );
   }
 
-  Future<void> _openMap(double lat, double lng) async {
+  /// Opens the site in a maps app. The NGO usually sends an address only, so
+  /// that is what is searched; an exact pin is used when one was sent.
+  Future<void> _openMap(PlantingRequest r) async {
     Haptics.tap();
     final uri = Uri.https('www.google.com', '/maps/search/', {
       'api': '1',
-      'query': '$lat,$lng',
+      'query': r.hasSitePin ? '${r.siteLat},${r.siteLng}' : r.siteAddress,
     });
     var opened = false;
     try {
@@ -217,14 +219,12 @@ class _PlantingDetailScreenState extends ConsumerState<PlantingDetailScreen> {
                   label: 'From the NGO',
                   value: r.replyNotes,
                 ),
-              if (r.hasSitePin) ...[
-                const SizedBox(height: 4),
-                OutlinedButton.icon(
-                  onPressed: () => _openMap(r.siteLat!, r.siteLng!),
-                  icon: const Icon(Icons.map_outlined, size: 18),
-                  label: const Text('Open the site in maps'),
-                ),
-              ],
+              const SizedBox(height: 4),
+              OutlinedButton.icon(
+                onPressed: () => _openMap(r),
+                icon: const Icon(Icons.map_outlined, size: 18),
+                label: const Text('Open the site in maps'),
+              ),
             ],
           ),
           const SizedBox(height: 14),

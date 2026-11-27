@@ -290,6 +290,16 @@ void main() {
       expect(find.text('Open the site in maps'), findsOneWidget);
     });
 
+    testWidgets('an address-only reply still offers the maps link', (tester) async {
+      await show(tester, _wire('r1', 'scheduled', extra: {
+        'siteAddress': '400053, Andheri West, Mumbai',
+        'meetingAt': '2026-12-05T04:00:00.000Z',
+        'meetingPoint': 'Valia college',
+      }));
+      expect(find.text('400053, Andheri West, Mumbai'), findsOneWidget);
+      expect(find.text('Open the site in maps'), findsOneWidget);
+    });
+
     testWidgets('an unanswered request offers cancel but no answer', (tester) async {
       await show(tester, _wire('r1', 'open'));
       expect(find.text("I'll be there"), findsNothing);
