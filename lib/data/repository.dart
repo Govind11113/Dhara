@@ -222,6 +222,20 @@ class Repository {
       rethrow;
     }
   }
+
+  // --- Config --------------------------------------------------------------
+
+  /// The stored value of an app_config key, or null if it is not set.
+  /// app_config is readable by every signed-in member.
+  Future<String?> configValue(String key) async {
+    final docs = await _list(Col.appConfig, [
+      Query.equal('key', key),
+      Query.limit(1),
+    ]);
+    if (docs.isEmpty) return null;
+    final value = docs.first.data['value'];
+    return value == null ? null : '$value';
+  }
 }
 
 final repositoryProvider = Provider<Repository>(

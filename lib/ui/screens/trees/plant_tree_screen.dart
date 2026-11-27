@@ -11,6 +11,7 @@ import '../../../core/services/location.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/errors.dart';
 import '../../../core/utils/haptics.dart';
+import '../../../core/utils/tree_spacing.dart';
 import '../../../data/models/tree.dart';
 import '../../../state/trees_controller.dart';
 import '../../widgets/camera_capture.dart';
@@ -131,16 +132,21 @@ class _PlantTreeScreenState extends ConsumerState<PlantTreeScreen> {
 
   /// The nearest already-registered tree that would make this spot illegal.
   ///
-  /// The server enforces this and is the authority (tree.js rejects anything
-  /// inside `tree.min_spacing_m`). This is only a heads-up, and deliberately
-  /// does not disable the button: GPS is accurate to metres at best, so a fix
-  /// that reads 2 m away may really be 5 m away, and blocking on that would
-  /// stop an honest user planting a legitimate tree.
-  (Tree, double)? _spacingConflict(LocationFix fix, List<Tree> trees) {
+  /// The server enforces this and is the authority (lib/tree_spacing.js
+  /// rejects anything closer than `tree.min_spacing_cm`, the same setting
+  /// read here). This is only a heads-up, and deliberately does not disable
+  /// the button: GPS is accurate to metres at best, far coarser than the
+  /// limit, so blocking on a fix would stop an honest user planting a
+  /// legitimate tree.
+  (Tree, double)? _spacingConflict(
+    LocationFix fix,
+    List<Tree> trees,
+    int minCm,
+  ) {
     final service = ref.read(locationServiceProvider);
     for (final tree in trees) {
       final d = service.distanceBetween(fix.lat, fix.lng, tree.lat, tree.lng);
-      if (d < Tunables.minTreeSpacingM) return (tree, d);
+      if (TreeSpacing.tooClose(d, minCm: minCm)) return (tree, d);
     }
     return null;
   }
@@ -425,8 +431,12 @@ class _PlantTreeScreenState extends ConsumerState<PlantTreeScreen> {
     // A cached position is a placeholder, not a reading: flag it on the map.
     final approximate = _live == null && _fix == null && _lastKnown != null;
     final nearby = _nearby(shown, trees);
+    final minCm =
+        ref.watch(minTreeSpacingCmProvider).value ?? TreeSpacing.defaultCm;
 
-    final conflict = _fix == null ? null : _spacingConflict(_fix!, trees);
+    final conflict = _fix == null
+        ? null
+        : _spacingConflict(_fix!, trees, minCm);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
@@ -454,7 +464,7 @@ class _PlantTreeScreenState extends ConsumerState<PlantTreeScreen> {
         TreeMap(
           me: shown,
           trees: nearby,
-          spacingRingM: Tunables.minTreeSpacingM,
+          spacingRingM: minCm / 100,
           approximate: approximate,
           // With no position at all, say why instead of spinning indefinitely.
           error: shown == null ? _locationError : null,
@@ -488,7 +498,11 @@ class _PlantTreeScreenState extends ConsumerState<PlantTreeScreen> {
 
         if (conflict != null) ...[
           const SizedBox(height: 12),
-          _TooCloseWarning(tree: conflict.$1, distanceM: conflict.$2),
+          _TooCloseWarning(
+            tree: conflict.$1,
+            distanceM: conflict.$2,
+            minCm: minCm,
+          ),
         ],
 
         // The settled fix, not the live one. This is the reading that will be
@@ -601,14 +615,19 @@ class _SessionStrip extends StatelessWidget {
 
 /// Shown when the current fix sits inside another tree's exclusion ring.
 ///
-/// Advisory, not blocking. The server has the final say, and GPS error alone can
-/// account for a couple of metres — refusing to submit here would strand a user
-/// who really is standing far enough away.
+/// Advisory, not blocking. The server has the final say, and GPS error alone
+/// is metres, far more than the limit: refusing to submit here would strand a
+/// user who really is standing far enough away.
 class _TooCloseWarning extends StatelessWidget {
-  const _TooCloseWarning({required this.tree, required this.distanceM});
+  const _TooCloseWarning({
+    required this.tree,
+    required this.distanceM,
+    required this.minCm,
+  });
 
   final Tree tree;
   final double distanceM;
+  final int minCm;
 
   @override
   Widget build(BuildContext context) {
@@ -629,11 +648,12 @@ class _TooCloseWarning extends StatelessWidget {
           const SizedBox(width: 11),
           Expanded(
             child: Text(
-              'You are about ${distanceM.round()} m from '
-              '"${tree.displayName}". Trees need '
-              '${Tunables.minTreeSpacingM.round()} m between them, so this may '
+              'You are about ${TreeSpacing.formatDistance(distanceM)} from '
+              '"${tree.displayName}". Trees must be at least '
+              '${TreeSpacing.formatSpacing(minCm)} apart, so this may '
               'be turned down. Take a few steps and wait for the fix to catch '
               'up.',
+              key: const Key('too-close-warning'),
               style: const TextStyle(
                 fontSize: 12,
                 height: 1.45,

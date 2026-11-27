@@ -4,6 +4,7 @@ import '../core/services/api.dart';
 import '../core/services/location.dart';
 import '../core/services/media.dart';
 import '../core/services/vision.dart';
+import '../core/utils/tree_spacing.dart';
 import '../data/models/tree.dart';
 import '../data/repository.dart';
 import 'auth_controller.dart';
@@ -44,6 +45,19 @@ class TreeSubmission {
 final speciesProvider = FutureProvider<List<Species>>(
   (ref) => ref.watch(repositoryProvider).species(),
 );
+
+/// The minimum planting distance in centimetres (`tree.min_spacing_cm`), the
+/// same setting the server enforces. Never fails: a missing, invalid or
+/// unreadable setting gives the 30 cm default.
+final minTreeSpacingCmProvider = FutureProvider<int>((ref) async {
+  try {
+    return TreeSpacing.parseCm(
+      await ref.watch(repositoryProvider).configValue(TreeSpacing.configKey),
+    );
+  } catch (_) {
+    return TreeSpacing.defaultCm;
+  }
+});
 
 /// Verification history for one tree.
 final treeVerificationsProvider =

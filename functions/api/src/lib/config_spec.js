@@ -17,7 +17,7 @@ export const CONFIG_SPEC = {
   'vision.timeout_ms': { type: 'int', min: 1000, max: 60000, label: 'AI timeout (ms)' },
 
   'tree.verify_radius_m': { type: 'int', min: 5, max: 500, label: 'Check-in radius (m)' },
-  'tree.min_spacing_m': { type: 'int', min: 0, max: 50, label: 'Minimum tree spacing (m)' },
+  'tree.min_spacing_cm': { type: 'int', min: 0, max: 5000, label: 'Minimum tree spacing (cm)' },
   'tree.max_gps_accuracy_m': { type: 'int', min: 5, max: 100, label: 'Worst GPS accuracy allowed (m)' },
   'tree.plant_credits': { type: 'int', min: 0, max: 100, label: 'Credits for planting' },
   'tree.credits_per_verification': { type: 'int', min: 0, max: 100, label: 'Default credits per check-in' },

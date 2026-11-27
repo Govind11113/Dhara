@@ -26,6 +26,7 @@ class Col {
   static const userBadges = 'user_badges';
   static const feedback = 'feedback';
   static const footprints = 'footprints';
+  static const appConfig = 'app_config';
 }
 
 class Buckets {
@@ -38,7 +39,8 @@ class Buckets {
 
 class Tunables {
   static const verifyRadiusM = 30.0;
-  static const minTreeSpacingM = 3.0;
+  // Tree spacing is not here: it is admin-configurable in centimetres. See
+  // core/utils/tree_spacing.dart and minTreeSpacingCmProvider.
   static const maxGpsAccuracyM = 20.0;
   static const vestingMonths = 12;
 }
